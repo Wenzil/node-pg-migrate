@@ -1,55 +1,109 @@
-var rewire    = require('rewire');
-var Migration = rewire('../lib/migration');
-var actions   = require('./1414549381268_names');
-var sinon     = require('sinon');
-var assert    = require('assert');
+/* eslint-disable no-unused-expressions */
+import sinon from 'sinon';
+import { expect } from 'chai';
+import Migration from '../lib/migration';
 
-var migration;
+const callbackMigration = '1414549381268_names.js';
+const promiseMigration = '1414549381268_names_promise.js';
+const migrationsTable = 'pgmigrations';
 
-describe('lib/migration', function () {
-  var dbMock = {};
-  var done;
+const actionsCallback = require(`./${callbackMigration}`); // eslint-disable-line import/no-dynamic-require
+const actionsPromise = require(`./${promiseMigration}`); // eslint-disable-line import/no-dynamic-require
 
-  before(function () {
-    Migration.__set__({
-      'db': dbMock
-    });
-    migration = new Migration( '1414549381268_names.js', actions, {migrations_table: 'pgmigrations'});
-  });
+describe('lib/migration', () => {
+  const dbMock = {};
+  const log = () => null;
+  const options = { migrations_table: migrationsTable };
+  let migration;
 
-  beforeEach(function () {
+  beforeEach(() => {
     dbMock.query = sinon.spy();
-    done = sinon.mock();
   });
 
-  describe('self.applyUp', function () {
-
-    it('normal operations: db.query should be called', function () {
-      migration.applyUp(done);
-      assert.equal(dbMock.query.calledOnce, true);
+  describe('self.applyUp', () => {
+    it('normal operations: db.query should be called', () => {
+      migration = new Migration(dbMock, callbackMigration, actionsCallback, options, log);
+      return migration
+        .applyUp()
+        .then(() => {
+          expect(dbMock.query).to.be.called;
+        });
     });
 
-    it('--dry-run option: db.query should not be called', function () {
-      global.dryRun = true;
-      migration.applyUp(done);
-      assert.equal(dbMock.query.called, false);
-      global.dryRun = false;
+    it('normal operations: db.query should be called when returning promise', () => {
+      migration = new Migration(dbMock, promiseMigration, actionsPromise, options, log);
+      return migration
+        .applyUp()
+        .then(() => {
+          expect(dbMock.query).to.be.called;
+        });
+    });
+
+    it('--dry-run option: db.query should not be called', () => {
+      migration = new Migration(
+        dbMock,
+        callbackMigration,
+        actionsCallback,
+        { ...options, dryRun: true },
+        log
+      );
+      return migration
+        .applyUp()
+        .then(() => {
+          expect(dbMock.query).to.not.be.called;
+        });
+    });
+
+    it('should make proper SQL calls', () => {
+      migration = new Migration(dbMock, promiseMigration, actionsCallback, options, log);
+      return migration
+        .applyUp()
+        .then(() => {
+          expect(dbMock.query).to.have.callCount(4);
+          expect(dbMock.query.getCall(0).args[0]).to.equal('BEGIN;');
+          expect(dbMock.query.getCall(1).args[0]).to.include('CREATE TABLE');
+          expect(dbMock.query.getCall(2).args[0]).to.include(`INSERT INTO "public"."${migrationsTable}"`);
+          expect(dbMock.query.getCall(3).args[0]).to.equal('COMMIT;');
+        });
     });
   });
 
-  describe('self.applyDown', function () {
-
-    it('normal operations: db.query should be called', function () {
-      migration.applyDown(done);
-      assert.equal(dbMock.query.calledOnce, true);
+  describe('self.applyDown', () => {
+    it('normal operations: db.query should be called', () => {
+      migration = new Migration(dbMock, callbackMigration, actionsCallback, options, log);
+      return migration
+        .applyDown()
+        .then(() => {
+          expect(dbMock.query).to.be.called;
+        });
     });
 
-    it('--dry-run option: db.query should not be called', function () {
-      global.dryRun = true;
-      migration.applyDown(done);
-      assert.equal(dbMock.query.called, false);
-      global.dryRun = false;
+    it('--dry-run option: db.query should not be called', () => {
+      migration = new Migration(
+        dbMock,
+        callbackMigration,
+        actionsCallback,
+        { ...options, dryRun: true },
+        log
+      );
+      return migration
+        .applyDown()
+        .then(() => {
+          expect(dbMock.query).to.not.be.called;
+        });
+    });
+
+    it('should make proper SQL calls', () => {
+      migration = new Migration(dbMock, promiseMigration, actionsCallback, options, log);
+      return migration
+        .applyDown()
+        .then(() => {
+          expect(dbMock.query).to.have.callCount(4);
+          expect(dbMock.query.getCall(0).args[0]).to.equal('BEGIN;');
+          expect(dbMock.query.getCall(1).args[0]).to.include('DROP TABLE');
+          expect(dbMock.query.getCall(2).args[0]).to.include(`DELETE FROM "public"."${migrationsTable}"`);
+          expect(dbMock.query.getCall(3).args[0]).to.equal('COMMIT;');
+        });
     });
   });
-
 });

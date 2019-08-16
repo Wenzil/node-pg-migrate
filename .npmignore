@@ -1,3 +1,6 @@
-test
-migrations
-node_modules
+.*
+*.log
+migrations/
+lib/
+test/
+mocha*
